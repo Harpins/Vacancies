@@ -45,7 +45,7 @@ pip install -r requirements.txt
 
 - SJ_SECRET_KEY
 
-Создайте файл `env.env` в одной папке с файлом `vacancies.py`.
+Создайте файл `env.env` в одной папке с `vacancies.py`.
 
 Пример содержимого `env.env`:
 ```

@@ -1,6 +1,7 @@
 import os
 from copy import deepcopy
 import requests
+from contextlib import suppress
 from dotenv import load_dotenv
 from terminaltables import AsciiTable
 
@@ -85,150 +86,141 @@ def get_sj_rub_salary(vacancy) -> None:
     return salary
 
 
-def get_sj_api_query_params(
+def get_sj_statistics(
+    sj_secret_key,
+    town_index: int = 4,
+    catalogues: int = 33,
     count: int = 95,
-    page: int = 0,
-    keyword: str = ''
 ) -> dict:
-    return {
-        'town': 4,
-        'catalogues': 33,
-        'count': count,
-        'page': page,
-        'keyword': keyword,
-    }
-
-
-def get_hh_api_query_params(
-    per_page: int = 100,
-    page: int = 0,
-    text: str = ''
-) -> dict:
-    return {
-        'text': text,
-        'area': '1',
-        'only_with_salary': True,
-        'per_page': per_page,
-        'page': page
-    }
-
-
-def get_sj_results(sj_secret_key) -> dict:
-    results = {}
+    sj_statistics = {}
     for language in LANGUAGES:
-        params = get_sj_api_query_params(keyword=language)
-        sj_responce = get_sj_response(sj_secret_key, params)
-        sj_total_vacancies = sj_responce.get('total')
+        params = {
+            'town': town_index,
+            'catalogues': catalogues,
+            'count': count,
+            'keyword': language,
+        }
+
+        vacancies = paginate_sj_response(sj_secret_key, params)[0]
+        sj_total_vacancies = paginate_sj_response(sj_secret_key, params)[1]
+        sj_statistics[language] = {
+            'vacancies_found': 0,
+            'vacancies_processed': 0,
+            'average_salary': None
+        }
         if not sj_total_vacancies:
-            results[language] = {
-                'vacancies_found': 0,
-                'vacancies_processed': 0,
-                'average_salary': None
-            }
             continue
-        vacancies = paginate_sj_response(sj_secret_key, params)
         if not vacancies:
-            results[language] = {
-                'vacancies_found': sj_total_vacancies,
-                'vacancies_processed': 0,
-                'average_salary': None
-            }
+            sj_statistics[language].update(
+                {'vacancies_found': sj_total_vacancies}
+            )
             continue
+
         salaries = [get_sj_rub_salary(vacancy) for vacancy in vacancies]
-        filtered_salaries = list(filter(lambda x: x is not None, salaries))
+        filtered_salaries = [salary for salary in salaries if salary]
         vacancies_processed = len(filtered_salaries)
         if not filtered_salaries:
-            results[language] = {
-                'vacancies_found': sj_total_vacancies,
-                'vacancies_processed': vacancies_processed,
-                'average_salary': None
-            }
+            sj_statistics[language].update(
+                {
+                    'vacancies_found': sj_total_vacancies,
+                    'vacancies_processed': vacancies_processed,
+                }
+            )
         else:
             average_salary = int(sum(filtered_salaries)/len(filtered_salaries))
-            results[language] = {
-                'vacancies_found': sj_total_vacancies,
-                'vacancies_processed': vacancies_processed,
-                'average_salary': average_salary
-            }
-    return results
+            sj_statistics[language].update(
+                {
+                    'vacancies_found': sj_total_vacancies,
+                    'vacancies_processed': vacancies_processed,
+                    'average_salary': average_salary,
+                }
+            )
+    return sj_statistics
 
 
-def get_hh_results():
-    results = {}
+def get_hh_statistics(
+    per_page: int = 100,
+    area: str = '1'
+) -> dict:
+    hh_statistics = {}
     for language in LANGUAGES:
-        params = get_hh_api_query_params(text=language)
-        hh_response = get_hh_response(params)
-        hh_total_vacancies = hh_response.get('found')
+        params = {
+            'text': language,
+            'area': area,
+            'only_with_salary': True,
+            'per_page': per_page,
+        }
+
+        vacancies = paginate_hh_response(params)[0]
+        hh_total_vacancies = paginate_hh_response(params)[1]
+        hh_statistics[language] = {
+            'vacancies_found': 0,
+            'vacancies_processed': 0,
+            'average_salary': None
+        }
         if not hh_total_vacancies:
-            results[language] = {
-                'vacancies_found': 0,
-                'vacancies_processed': 0,
-                'average_salary': None
-            }
             continue
-        vacancies = paginate_hh_response(params)
         if not vacancies:
-            results[language] = {
-                'vacancies_found': hh_total_vacancies,
-                'vacancies_processed': 0,
-                'average_salary': None
-            }
+            hh_statistics[language].update(
+                {'vacancies_found': hh_total_vacancies}
+            )
             continue
 
         salaries = [get_hh_rub_salary(vacancy) for vacancy in vacancies]
-        filtered_salaries = list(filter(lambda x: x is not None, salaries))
+        filtered_salaries = [salary for salary in salaries if salary]
         vacancies_processed = len(filtered_salaries)
         if not filtered_salaries:
-            results[language] = {
-                'vacancies_found': hh_total_vacancies,
-                'vacancies_processed': vacancies_processed,
-                'average_salary': None
-            }
+            hh_statistics[language].update(
+                {
+                    'vacancies_found': hh_total_vacancies,
+                    'vacancies_processed': vacancies_processed,
+                }
+            )
         else:
             average_salary = int(sum(filtered_salaries)/len(filtered_salaries))
-            results[language] = {
-                'vacancies_found': hh_total_vacancies,
-                'vacancies_processed': vacancies_processed,
-                'average_salary': average_salary
-            }
-    return results
+            hh_statistics[language].update(
+                {
+                    'vacancies_found': hh_total_vacancies,
+                    'vacancies_processed': vacancies_processed,
+                    'average_salary': average_salary,
+                }
+            )
+    return hh_statistics
 
 
-def paginate_sj_response(sj_secret_key, params, pages: int = 5):
+def paginate_sj_response(sj_secret_key, params, pages: int = 5) -> list:
     vacancies = []
+    sj_total_vacancies = 0
     for page in range(pages):
         params.update({'page': page})
         vacancies_on_page = []
-        try:
+        with suppress(requests.exceptions.HTTPError):
             sj_response = get_sj_response(sj_secret_key, params)
             vacancies_on_page = sj_response.get('objects')
-        except requests.exceptions.HTTPError:
-            pass
-        try:
+            if not sj_total_vacancies:
+                sj_total_vacancies = sj_response.get('total')
+        with suppress(TypeError):
             vacancies.extend(vacancies_on_page)
-        except TypeError:
-            pass
-    return vacancies
+    return [vacancies, sj_total_vacancies]
 
 
-def paginate_hh_response(params, pages: int = 10):
+def paginate_hh_response(params, pages: int = 5) -> list:
     vacancies = []
+    hh_total_vacancies = 0
     for page in range(pages):
         params.update({'page': page})
         vacancies_on_page = []
-        try:
+        with suppress(requests.exceptions.HTTPError):
             hh_response = get_hh_response(params)
             vacancies_on_page = hh_response.get('items')
-        except requests.exceptions.HTTPError:
-            pass
-        try:
+            if not hh_total_vacancies:
+                hh_total_vacancies = hh_response.get('found')
+        with suppress(TypeError):
             vacancies.extend(vacancies_on_page)
-        except TypeError:
-            pass
-    return vacancies
+    return [vacancies, hh_total_vacancies]
 
 
-def make_ascii_table_data(results):
+def make_ascii_table_data(results) -> list:
     table_data = deepcopy(TABLE_DATA)
     for key, subdict in results.items():
         table_row = []
@@ -242,10 +234,10 @@ def make_ascii_table_data(results):
 def main():
     load_dotenv('env.env')
     sj_secret_key = os.environ['SJ_SECRET_KEY']
-    hh_results = get_hh_results()
-    sj_results = get_sj_results(sj_secret_key)
-    hh_table_data = make_ascii_table_data(hh_results)
-    sj_table_data = make_ascii_table_data(sj_results)
+    hh_statistics = get_hh_statistics()
+    sj_statistics = get_sj_statistics(sj_secret_key)
+    hh_table_data = make_ascii_table_data(hh_statistics)
+    sj_table_data = make_ascii_table_data(sj_statistics)
     hh_table = AsciiTable(hh_table_data, title="HH Moscow")
     sj_table = AsciiTable(sj_table_data, title="SuperJob Moscow")
     print(hh_table.table)

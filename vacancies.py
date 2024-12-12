@@ -106,9 +106,7 @@ def get_sj_statistics(
 
         vacancies, sj_total_vacancies = get_sj_vacancies(sj_secret_key, params)
 
-        salaries = []
-        if vacancies:
-            salaries = [get_sj_rub_salary(vacancy) for vacancy in vacancies]
+        salaries = [get_sj_rub_salary(vacancy) for vacancy in vacancies]
 
         sj_statistics[language] = make_statistics(sj_total_vacancies, salaries)
 
@@ -127,9 +125,7 @@ def get_hh_statistics(per_page: int = 100, area: str = "1") -> dict:
 
         vacancies, hh_total_vacancies = get_hh_vacancies(params)
 
-        salaries = []
-        if vacancies:
-            salaries = [get_hh_rub_salary(vacancy) for vacancy in vacancies]
+        salaries = [get_hh_rub_salary(vacancy) for vacancy in vacancies]
 
         hh_statistics[language] = make_statistics(hh_total_vacancies, salaries)
 

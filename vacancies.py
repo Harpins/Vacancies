@@ -152,7 +152,7 @@ def make_statistics(total_vacancies: int, salaries: list) -> dict:
     return statistics
 
 
-def get_sj_vacancies(sj_secret_key: str, params: dict) -> list:
+def get_sj_vacancies(sj_secret_key: str, params: dict) -> tuple:
     vacancies = []
     sj_total_vacancies = 0
     more = True
@@ -173,7 +173,7 @@ def get_sj_vacancies(sj_secret_key: str, params: dict) -> list:
     return vacancies, sj_total_vacancies
 
 
-def get_hh_vacancies(params: dict) -> list:
+def get_hh_vacancies(params: dict) -> tuple:
     vacancies = []
     hh_total_vacancies = 0
     with suppress(requests.exceptions.HTTPError):
@@ -181,13 +181,12 @@ def get_hh_vacancies(params: dict) -> list:
         pages = hh_response.get("pages")
         hh_total_vacancies = hh_response.get("found")
         vacancies.extend(hh_response.get("items"))
-        if pages > 1:
-            for page in range(1, pages):
-                params["page"] = page
-                vacancies_on_page = []
-                hh_response = get_hh_response(params)
-                vacancies_on_page = hh_response.get("items")
-                vacancies.extend(vacancies_on_page)
+        for page in range(1, pages):
+            params["page"] = page
+            vacancies_on_page = []
+            hh_response = get_hh_response(params)
+            vacancies_on_page = hh_response.get("items")
+            vacancies.extend(vacancies_on_page)
     return vacancies, hh_total_vacancies
 
 
